@@ -19,6 +19,8 @@ PYAV_VER="17.1.0"
 OUT_DIR="${1:-dist}"
 WORKDIR="${TEMP:-/tmp}/build_av_windows"
 mkdir -p "$OUT_DIR"
+# Absolutize before any cd: the build runs in a temp WORKDIR.
+OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 rm -rf "$WORKDIR"
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"

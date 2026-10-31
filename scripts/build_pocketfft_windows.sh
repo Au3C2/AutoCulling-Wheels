@@ -10,8 +10,10 @@
 set -euo pipefail
 
 OUT_DIR="${1:-dist}"
-HERE="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$OUT_DIR"
+# Absolutize before any cd: the build runs in a temp WORKDIR.
+OUT_DIR="$(cd "$OUT_DIR" && pwd)"
+HERE="$(cd "$(dirname "$0")" && pwd)"
 
 echo "=== Building pocketfft_fast wheel (MSVC) ==="
 cp -r "$HERE/pocketfft_fast" "$TEMP/pocketfft_build_src"

@@ -4,6 +4,8 @@ set -euo pipefail
 OPENCV_PYTHON_TAG="93"
 OUT_DIR="${1:-dist}"
 mkdir -p "${OUT_DIR}"
+# Absolutize before any cd: later steps write to ${OUT_DIR} from other CWDs.
+OUT_DIR="$(cd "${OUT_DIR}" && pwd)"
 
 WORKDIR="${TMPDIR:-/tmp}/build_opencv_macos"
 rm -rf "${WORKDIR}"

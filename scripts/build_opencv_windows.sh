@@ -17,6 +17,8 @@ OPENCV_PY_TAG="93"   # opencv-python release 5.0.0.93
 OUT_DIR="${1:-dist}"
 WORKDIR="${TEMP:-/tmp}/build_opencv_windows"
 mkdir -p "$OUT_DIR"
+# Absolutize before any cd: the build runs in a temp WORKDIR.
+OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 rm -rf "$WORKDIR"
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
