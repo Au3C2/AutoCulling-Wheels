@@ -61,6 +61,23 @@ awk --version 2>/dev/null | head -1
   --enable-avdevice \
   --extra-cflags="/O2"
 
+# Running configure under Git Bash eats one level of backslash escaping in the
+# /showIncludes parsing script written to ffbuild/common.mak, leaving an
+# invalid awk regex (gsub(/\/, "/")) that breaks every .dep rule. Repair the
+# escaping before make (python + chr() to avoid shell mangling here too).
+python - <<'PY'
+p = 'ffbuild/common.mak'
+s = open(p, encoding='utf-8', newline='').read()
+bs = chr(92)
+broken = 'gsub(/' + bs + '/, "/")'
+fixed = 'gsub(/' + bs + bs + '/, "/")'
+if broken in s:
+    open(p, 'w', encoding='utf-8', newline='').write(s.replace(broken, fixed))
+    print('patched: repaired mangled awk regex in common.mak')
+else:
+    print('no mangled gsub found (already fine)')
+PY
+
 make -j"$(nproc)" install
 cd "$WORKDIR"
 
