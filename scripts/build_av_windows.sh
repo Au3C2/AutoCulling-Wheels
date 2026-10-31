@@ -30,6 +30,15 @@ git clone --depth 1 --branch "${FFMPEG_TAG}" https://github.com/FFmpeg/FFmpeg.gi
 cd ffmpeg
 
 echo "=== 2. Configuring + building minimal FFmpeg (MSVC) ==="
+# ffmpeg's MSVC dependency generation parses /showIncludes output with an awk
+# script that Git-Bash's awk cannot parse. The runner's preinstalled MSYS2 awk
+# can — copy it (with its runtime) into an isolated dir so we don't shadow
+# MSVC's link.exe with msys2's /usr/bin/link.
+mkdir -p "$WORKDIR/tools"
+cp /c/msys64/usr/bin/awk.exe "$WORKDIR/tools/" 2>/dev/null || true
+cp /c/msys64/usr/bin/msys-2.0.dll "$WORKDIR/tools/" 2>/dev/null || true
+export PATH="$WORKDIR/tools:$PATH"
+awk --version 2>/dev/null | head -1
 ./configure \
   --toolchain=msvc \
   --prefix="${WORKDIR}/ffmpeg_install" \
