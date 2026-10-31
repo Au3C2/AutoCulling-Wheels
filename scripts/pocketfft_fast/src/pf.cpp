@@ -39,17 +39,24 @@ static PyObject *rfft2(PyObject *self, PyObject *arg) {
       reinterpret_cast<std::complex<float> *>(PyArray_DATA(out));
 
   try {
-    pocketfft::shape_t shape = {static_cast<size_t>(h), static_cast<size_t>(w)};
-    pocketfft::stride_t s_in = {static_cast<size_t>(w) * 4, 4};
-    pocketfft::stride_t s_out = {static_cast<size_t>(cols) * 8, 8};
+    // shape_t is std::vector<unsigned long long>, stride_t std::vector<long long>
+    // on the reference pocketfft build; use explicit typedefs and casts so both
+    // MinGW and MSVC accept the initializers without narrowing errors.
+    using pf_shape_t = pocketfft::shape_t;
+    using pf_stride_t = pocketfft::stride_t;
+    using dim_t = pf_shape_t::value_type;
+    using stride_elem_t = pf_stride_t::value_type;
+    pf_shape_t shape = {static_cast<dim_t>(h), static_cast<dim_t>(w)};
+    pf_stride_t s_in = {static_cast<stride_elem_t>(w) * 4, 4};
+    pf_stride_t s_out = {static_cast<stride_elem_t>(cols) * 8, 8};
 
     // Stage 1: real->complex along the last axis, out-of-place.
     pocketfft::r2c<float>(shape, s_in, s_out, 1, pocketfft::FORWARD,
                           in, outp, 1.0f, 0);
     // Stage 2: complex->complex along the first axis, in-place on the
     // half spectrum.
-    pocketfft::shape_t shape2 = {static_cast<size_t>(h), static_cast<size_t>(cols)};
-    pocketfft::stride_t s2 = {static_cast<size_t>(cols) * 8, 8};
+    pf_shape_t shape2 = {static_cast<dim_t>(h), static_cast<dim_t>(cols)};
+    pf_stride_t s2 = {static_cast<stride_elem_t>(cols) * 8, 8};
     pocketfft::c2c<float>(shape2, s2, s2, pocketfft::shape_t{0}, pocketfft::FORWARD,
                           outp, outp, 1.0f, 0);
   } catch (std::exception &e) {
