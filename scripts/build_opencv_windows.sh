@@ -28,6 +28,19 @@ git clone --depth 1 --branch "${OPENCV_PY_TAG}" https://github.com/opencv/opencv
 cd opencv-python
 git submodule update --init --depth 1 opencv
 
+# opencv-python's Windows packaging expects the bundled ffmpeg DLL
+# (opencv_videoio_ffmpeg*.dll); we build with WITH_FFMPEG=OFF, so exempt the
+# pattern from the missing-file assertion (same treatment as 'gapi').
+python - <<'PY'
+p = 'setup.py'
+s = open(p).read()
+old = 'if not found and "gapi" not in relpath_re:'
+new = 'if not found and "gapi" not in relpath_re and "ffmpeg" not in relpath_re:'
+assert old in s, 'setup.py pattern not found'
+open(p, 'w', newline='\n').write(s.replace(old, new))
+print('patched: ffmpeg DLL exempted from cmake-output classifier')
+PY
+
 echo "=== 2. Installing build tools ==="
 pip install -q scikit-build cmake ninja wheel numpy
 
