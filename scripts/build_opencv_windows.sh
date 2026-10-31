@@ -40,7 +40,7 @@ old = '''                    if not found and "gapi" not in relpath_re:
 new = '''                    if not found:
                         print("WARNING: skipping missing cmake output: %s" % relpath_re)'''
 assert old in s, 'setup.py pattern not found'
-open(p, 'w', newline='\\n').write(s.replace(old, new))
+open(p, 'w', newline='\n').write(s.replace(old, new))
 print('patched: cmake-output classifier skips missing patterns')
 PY
 
