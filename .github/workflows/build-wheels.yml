@@ -5,6 +5,11 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - main
+    paths:
+      - '.github/workflows/build-wheels.yml'
+      - 'scripts/**'
 
 jobs:
   build-macos:
@@ -26,10 +31,43 @@ jobs:
           name: wheels-macos
           path: dist/*.whl
 
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Install build tools
+        shell: bash
+        run: |
+          pip install cmake ninja wheel numpy
+      - name: Build pocketfft_fast wheel
+        shell: bash
+        run: |
+          chmod +x scripts/build_pocketfft_windows.sh
+          ./scripts/build_pocketfft_windows.sh dist
+      - name: Build minimal OpenCV wheel
+        shell: bash
+        timeout-minutes: 120
+        run: |
+          chmod +x scripts/build_opencv_windows.sh
+          ./scripts/build_opencv_windows.sh dist
+      - name: Build minimal PyAV wheel
+        shell: bash
+        run: |
+          chmod +x scripts/build_av_windows.sh
+          ./scripts/build_av_windows.sh dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows
+          path: dist/*.whl
+
   release:
-    needs: [build-macos]
+    needs: [build-macos, build-windows]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: always()
     permissions:
       contents: write
     steps:
