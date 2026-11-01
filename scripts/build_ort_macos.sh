@@ -37,7 +37,6 @@ export CMAKE_OSX_ARCHITECTURES=arm64
 # The enum is a compile-time constant (no dyld binding), so wrapping it in
 # @available keeps identical behavior on macOS 13+ and falls back to
 # MLComputeUnitsAll on 12.
-python3 patch_coreml_ane.py
 
 WORKDIR="${TMPDIR:-/tmp}/build_ort_macos"
 rm -rf "${WORKDIR}"
@@ -68,6 +67,7 @@ assert old in t, 'model.mm pattern not found'
 p.write_text(t.replace(old, new, 1))
 print('model.mm patched')
 PYEOF
+python3 patch_coreml_ane.py
 
 echo "=== 2. Configuring reduced-ops build ==="
 PYTHON_BIN="${PYTHON_BIN:-python3}"
