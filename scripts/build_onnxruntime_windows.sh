@@ -65,6 +65,7 @@ python tools/ci_build/build.py \
   --disable_ml_ops \
   --include_ops_by_config "$HERE/onnxruntime_windows_reduced_ops.config" \
   --cmake_extra_defines CMAKE_POLICY_VERSION_MINIMUM=3.5 \
+  --cmake_extra_defines "CMAKE_CXX_FLAGS=/wd4875" \
   --cmake_generator Ninja \
   --parallel "$NUMBER_OF_PROCESSORS" \
   --skip_tests
