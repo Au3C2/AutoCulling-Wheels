@@ -80,6 +80,12 @@ for p in glob.glob('ffbuild/config.mak') + glob.glob('ffbuild/common.mak'):
 PY
 
 make -j"$(nproc)" install
+
+# MSVC builds leave the .lib import libraries in the build tree (the install
+# rule ships only headers/pc/dlls); PyAV links against them, so collect them
+# into the install lib/ dir.
+find "$WORKDIR/ffmpeg" -maxdepth 2 -name "*.lib" -exec cp {} "$WORKDIR/ffmpeg_install/lib/" \;
+ls "$WORKDIR/ffmpeg_install/lib/" | grep -c "\.lib" || true
 cd "$WORKDIR"
 
 echo "=== 3. Building PyAV ${PYAV_VER} against minimal FFmpeg ==="
