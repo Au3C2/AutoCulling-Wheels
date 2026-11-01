@@ -63,5 +63,42 @@ export CMAKE_ARGS="-DWITH_FFMPEG=OFF \
  -DWITH_TIFF=ON -DWITH_JPEG=ON -DWITH_WEBP=ON -DWITH_PNG=ON \
  -DCMAKE_BUILD_TYPE=Release"
 python setup.py bdist_wheel
-cp dist/*.whl "$OUT_DIR/"
+
+echo "=== 4. Renaming wheel to opencv-python-custom (matches pyproject pins) ==="
+export OUT_DIR
+python - <<'PY'
+import os, shutil, zipfile
+
+src = [f for f in os.listdir('dist') if f.endswith('.whl')][0]
+work = 'renamed'
+shutil.rmtree(work, ignore_errors=True)
+with zipfile.ZipFile(os.path.join('dist', src)) as z:
+    z.extractall(work)
+
+old_di = os.path.join(work, 'opencv_python-5.0.0.93.dist-info')
+new_di = os.path.join(work, 'opencv_python_custom-5.0.0.93.dist-info')
+if os.path.isdir(old_di) and not os.path.isdir(new_di):
+    os.rename(old_di, new_di)
+meta = os.path.join(new_di, 'METADATA')
+s = open(meta, encoding='utf-8').read()
+s = s.replace('Name: opencv-python\n', 'Name: opencv-python-custom\n')
+open(meta, 'w', encoding='utf-8', newline='').write(s)
+
+record = os.path.join(new_di, 'RECORD')
+lines = [l.replace('opencv_python-5.0.0.93.dist-info', 'opencv_python_custom-5.0.0.93.dist-info')
+         for l in open(record, encoding='utf-8').read().splitlines() if l.strip()]
+open(record, 'w', encoding='utf-8', newline='').write('\n'.join(lines) + '\n')
+
+out = os.path.join(os.environ.get('OUT_DIR', 'dist'),
+                   'opencv_python_custom-5.0.0.93-cp310-cp310-win_amd64.whl')
+with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as z:
+    for root, dirs, files in os.walk(work):
+        for f in files:
+            full = os.path.join(root, f)
+            rel = os.path.relpath(full, work).replace(os.sep, '/')
+            z.write(full, rel)
+shutil.rmtree(work)
+print('renamed wheel:', out)
+PY
+
 echo "SUCCESS: minimal OpenCV wheel built at $OUT_DIR"

@@ -78,8 +78,10 @@ jobs:
       - name: Create / Update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name || 'v5.0.0.93-cull1' }}
-          name: AutoCulling Prebuilt Wheels ${{ github.ref_name || 'v5.0.0.93-cull1' }}
+          # Branch pushes must target the fixed wheel release, not a release
+          # named after the branch (github.ref_name would be 'main').
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v5.0.0.93-cull1' }}
+          name: AutoCulling Prebuilt Wheels ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v5.0.0.93-cull1' }}
           draft: false
           prerelease: false
           files: artifacts/**/*.whl
