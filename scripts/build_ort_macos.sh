@@ -29,11 +29,15 @@ ABS_OUT_DIR="$(cd "${OUT_DIR}" && pwd)"
 # runtime code paths behind it are guarded by CoreML EP capability checks.
 export MACOSX_DEPLOYMENT_TARGET=12.0
 export CMAKE_OSX_ARCHITECTURES=arm64
-# CoreML provider uses the macOS 13 MLComputeUnitsCPUAndNeuralEngine enum
-# behind a runtime capability check; ORT sets COMPILE_WARNING_AS_ERROR on all
-# targets, and CMAKE_OBJCXX_FLAGS is not honored for its ObjC++ targets, so
-# inject via the environment (read by CMake at first configure).
-export OBJCXXFLAGS="-Wno-error=unguarded-availability-new"
+# CoreML provider source patch: MLComputeUnitsCPUAndNeuralEngine is a
+# macOS 13 enum used unguarded at model.mm:539, which trips
+# -Werror,-Wunguarded-availability-new when building against the official
+# 12.0 deployment target (ORT sets COMPILE_WARNING_AS_ERROR globally and
+# neither CMAKE_OBJCXX_FLAGS nor OBJCXXFLAGS reach its ObjC++ targets).
+# The enum is a compile-time constant (no dyld binding), so wrapping it in
+# @available keeps identical behavior on macOS 13+ and falls back to
+# MLComputeUnitsAll on 12.
+python3 patch_coreml_ane.py
 
 WORKDIR="${TMPDIR:-/tmp}/build_ort_macos"
 rm -rf "${WORKDIR}"
@@ -44,6 +48,26 @@ echo "=== 1. Cloning onnxruntime v${ORT_VER} (recursive) ==="
 git clone --depth 1 --branch "v${ORT_VER}" --recursive \
   https://github.com/microsoft/onnxruntime.git ort_src
 cd ort_src
+
+cat > patch_coreml_ane.py <<'PYEOF'
+from pathlib import Path
+
+p = Path('onnxruntime/core/providers/coreml/model/model.mm')
+t = p.read_text()
+old = """      } else if (coreml_compute_unit & COREML_FLAG_ONLY_ENABLE_DEVICE_WITH_ANE) {
+        config.computeUnits = MLComputeUnitsCPUAndNeuralEngine;  // Apple Neural Engine
+      } else {"""
+new = """      } else if (coreml_compute_unit & COREML_FLAG_ONLY_ENABLE_DEVICE_WITH_ANE) {
+        if (@available(macOS 13.0, *)) {
+          config.computeUnits = MLComputeUnitsCPUAndNeuralEngine;  // Apple Neural Engine
+        } else {
+          config.computeUnits = MLComputeUnitsAll;
+        }
+      } else {"""
+assert old in t, 'model.mm pattern not found'
+p.write_text(t.replace(old, new, 1))
+print('model.mm patched')
+PYEOF
 
 echo "=== 2. Configuring reduced-ops build ==="
 PYTHON_BIN="${PYTHON_BIN:-python3}"
