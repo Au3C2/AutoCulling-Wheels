@@ -14,6 +14,7 @@ on:
 jobs:
   build-macos:
     runs-on: macos-14
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -21,15 +22,27 @@ jobs:
           python-version: '3.10'
       - name: Install build tools
         run: |
-          pip install cmake ninja scikit-build wheel numpy
-      - name: Build macOS wheel
+          pip install cmake ninja scikit-build wheel numpy "cython>=3.1,<3.2" "setuptools==79.0.1" delocate pkgconfig
+      - name: Build minimal OpenCV wheel
         run: |
           chmod +x scripts/build_opencv_macos.sh
           ./scripts/build_opencv_macos.sh dist
+      - name: Build minimal PyAV wheel
+        run: |
+          chmod +x scripts/build_av_macos.sh
+          ./scripts/build_av_macos.sh dist
+      - name: Build reduced-ops ONNX Runtime wheel
+        timeout-minutes: 120
+        run: |
+          chmod +x scripts/build_ort_macos.sh
+          ./scripts/build_ort_macos.sh dist
+      - name: Generate sha256 checksums
+        run: |
+          cd dist && shasum -a 256 *.whl > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-macos
-          path: dist/*.whl
+          path: dist/*
 
   build-windows:
     runs-on: windows-latest
@@ -73,10 +86,14 @@ jobs:
           export PATH="/mingw64/bin:$PATH"
           OUT_ABS=$(cygpath -m "$(cygpath -u "$GITHUB_WORKSPACE")/dist")
           bash scripts/build_av_windows.sh "$OUT_ABS"
+      - name: Generate sha256 checksums
+        shell: bash
+        run: |
+          cd dist && sha256sum *.whl > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-windows
-          path: dist/*.whl
+          path: dist/*
 
   build-windows-ort:
     # The reduced-ops DirectML ORT build takes ~2-3 h on a 4-core runner;
