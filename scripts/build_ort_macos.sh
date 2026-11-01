@@ -49,7 +49,7 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
   --use_coreml \
   --build_wheel \
   --wheel_name_suffix custom \
-  --parallel "$(sysctl -n hw.ncpu 2>/dev/null || nproc)" \
+  --parallel "${ORT_JOBS:-2}" \
   --skip_tests \
   --cmake_path="$(command -v cmake)" \
   --ctest_path="$(command -v ctest)" \
