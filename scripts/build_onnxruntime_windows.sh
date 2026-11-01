@@ -47,11 +47,15 @@ done
 cd ort
 
 # MSVC 18 deprecates the non-string [[gsl::suppress(x)]] form (C4875,
-# escalated to an error by /WX). Rewrite ORT's own gsl patch so the macro it
-# installs uses the string-literal form [[gsl::suppress("x")]] - the
-# officially recommended migration, semantically identical. Patching the
-# patch file is the only hook that runs before FetchContent applies it
-# during configure.
+# escalated to an error by /WX). Two fixes are applied to the freshly
+# cloned ORT tree, both of which must land BEFORE configure:
+#   1. rewrite ORT's own gsl patch (cmake/patches/gsl/1064.patch) so the
+#      macro it installs uses the string-literal [[gsl::suppress("x")]]
+#      form - the officially recommended migration, semantically identical;
+#   2. hook that patch into the NON-CUDA gsl FetchContent branch: the
+#      onnxruntime_USE_CUDA if/else declares GSL twice and only the CUDA
+#      branch carries a PATCH_COMMAND, so the DirectML build otherwise
+#      compiles the upstream non-string macro.
 python - <<'PYEOF'
 from pathlib import Path
 
@@ -62,7 +66,22 @@ new = '#define GSL_SUPPRESS(x) [[gsl::suppress("x")]]'
 count = t.count(old)
 assert count == 2, 'expected 2 occurrences, found %d' % count
 p.write_text(t.replace(old, new))
-print('gsl patch rewritten (2 macro definitions now string-literal)')
+
+d = Path('cmake/external/onnxruntime_external_deps.cmake')
+dt = d.read_text()
+anchor = """    URL_HASH SHA1=${DEP_SHA1_microsoft_gsl}
+    EXCLUDE_FROM_ALL
+    FIND_PACKAGE_ARGS 4.0 NAMES Microsoft.GSL
+  )"""
+patched = """    URL_HASH SHA1=${DEP_SHA1_microsoft_gsl}
+    PATCH_COMMAND ${Patch_EXECUTABLE} --binary --ignore-whitespace -p1 < ${PROJECT_SOURCE_DIR}/patches/gsl/1064.patch
+    EXCLUDE_FROM_ALL
+    FIND_PACKAGE_ARGS 4.0 NAMES Microsoft.GSL
+  )"""
+n = dt.count(anchor)
+assert n == 1, 'expected exactly 1 unpatched gsl declare, found %d' % n
+d.write_text(dt.replace(anchor, patched, 1))
+print('gsl macro string-literal + PATCH_COMMAND hooked into non-CUDA branch')
 PYEOF
 
 echo "=== 2. Build wheel (single-step reduced-ops flow, same as macOS) ==="
