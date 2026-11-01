@@ -29,6 +29,11 @@ ABS_OUT_DIR="$(cd "${OUT_DIR}" && pwd)"
 # runtime code paths behind it are guarded by CoreML EP capability checks.
 export MACOSX_DEPLOYMENT_TARGET=12.0
 export CMAKE_OSX_ARCHITECTURES=arm64
+# CoreML provider uses the macOS 13 MLComputeUnitsCPUAndNeuralEngine enum
+# behind a runtime capability check; ORT sets COMPILE_WARNING_AS_ERROR on all
+# targets, and CMAKE_OBJCXX_FLAGS is not honored for its ObjC++ targets, so
+# inject via the environment (read by CMake at first configure).
+export OBJCXXFLAGS="-Wno-error=unguarded-availability-new"
 
 WORKDIR="${TMPDIR:-/tmp}/build_ort_macos"
 rm -rf "${WORKDIR}"
@@ -56,8 +61,6 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
   --cmake_path="$(command -v cmake)" \
   --ctest_path="$(command -v ctest)" \
   --cmake_extra_defines="CMAKE_POLICY_VERSION_MINIMUM=3.5" \
-  --cmake_extra_defines="CMAKE_OBJCXX_FLAGS=-Wno-error=unguarded-availability-new" \
-  --cmake_extra_defines="CMAKE_OBJC_FLAGS=-Wno-error=unguarded-availability-new" \
   --cmake_extra_defines="onnxruntime_BUILD_UNIT_TESTS=OFF" \
   --cmake_generator="Unix Makefiles"
 
