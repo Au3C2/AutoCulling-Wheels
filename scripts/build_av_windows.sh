@@ -61,26 +61,22 @@ awk --version 2>/dev/null | head -1
   --enable-avdevice \
   --extra-cflags="/O2"
 
-# Running configure under Git Bash mangles the /showIncludes awk regex
-# (gsub(/\\/, "/")) that reaches ffbuild/config.mak through an eval — the
-# exact number of surviving backslashes varies, so normalize ANY variant to
-# exactly two and dump the line for debugging.
+# The /showIncludes awk regex stored in ffbuild/config.mak loses backslashes
+# through the make->shell->awk chain at runtime. Replace the regex with a
+# backslash-free program: the backslash char is built at awk runtime via
+# sprintf("%c%c", 92, 92), so no escaping layer can damage it.
 python - <<'PY'
-import glob, re
+import glob
 bs = chr(92)
-pat = re.compile('gsub\\(/' + bs + '*/, "/"\\)')
-fixed = 'gsub(/' + bs + bs + '/, "/")'
+stored = 'gsub(/' + bs + bs + '/, "/");'
+replacement = 'BS=sprintf("%c%c", 92, 92); gsub(BS, "/");'
 for p in glob.glob('ffbuild/config.mak') + glob.glob('ffbuild/common.mak'):
     s = open(p, encoding='utf-8', newline='').read()
-    found = pat.findall(s)
-    if found:
-        for f in found:
-            s = s.replace(f, fixed)
-        open(p, 'w', encoding='utf-8', newline='').write(s)
-    print(p, '-> gsub variants found:', [len(f) for f in found])
-    for line in s.splitlines():
-        if 'including' in line:
-            print('DEP line:', line[:240])
+    if stored in s:
+        open(p, 'w', encoding='utf-8', newline='').write(s.replace(stored, replacement))
+        print('patched: backslash-free awk DEP program written to', p)
+    else:
+        print('no stored gsub form in', p)
 PY
 
 make -j"$(nproc)" install
