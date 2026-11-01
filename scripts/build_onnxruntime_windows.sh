@@ -46,41 +46,28 @@ for attempt in 1 2 3; do
 done
 cd ort
 
-echo "=== 2. Build wheel (documented 3-step reduced-ops flow) ==="
-cp "$HERE/onnxruntime_windows_reduced_ops.config" reduced_ops.config
-
-# Step A: configure. REDUCED_OPS_BUILD is passed as an explicit cmake define
-# instead of --include_ops_by_config: build.py's update phase imports
-# reduce_op_kernels in-process, and its `from util import parse_config`
-# resolves against a stale sys.modules['util'] on some environments
-# (ImportError on the GitHub runner; worked locally). The standalone
-# reduce step below replaces that fragile in-process call.
+echo "=== 2. Build wheel (single-step reduced-ops flow, same as macOS) ==="
+# The earlier 3-step variant (configure with REDUCED_OPS_BUILD=ON, then a
+# standalone reduce_op_kernels pass, then build) cannot work: the reduced
+# kernel registration files must exist at CONFIGURE time, because they are
+# what populates the onnxruntime_providers target source list ("No SOURCES
+# given to target: onnxruntime_providers"). The single-step
+# --include_ops_by_config flow runs the reducer inside build.py's update
+# phase and is what the macOS wheel build already validates; its historical
+# ImportError was just a missing flatbuffers install (fixed in the job's
+# pip step).
 python tools/ci_build/build.py \
   --config Release \
   --build_dir build \
   --build_wheel \
   --use_dml \
-  --cmake_extra_defines onnxruntime_REDUCED_OPS_BUILD=ON \
+  --disable_contrib \
+  --disable_ml_ops \
+  --include_ops_by_config "$HERE/onnxruntime_windows_reduced_ops.config" \
+  --cmake_extra_defines CMAKE_POLICY_VERSION_MINIMUM=3.5 \
   --cmake_generator Ninja \
   --parallel "$NUMBER_OF_PROCESSORS" \
-  --skip_tests \
-  --update
-
-# Step B: prune the kernel registrations (standalone, fresh interpreter).
-python tools/ci_build/reduce_op_kernels.py reduced_ops.config --cmake_build_dir build/Release
-
-# Step C: compile. REDUCED_OPS_BUILD is already configured; update=False
-# keeps build.py from re-importing reduce_op_kernels in-process.
-python tools/ci_build/build.py \
-  --config Release \
-  --build_dir build \
-  --build_wheel \
-  --use_dml \
-  --cmake_extra_defines onnxruntime_REDUCED_OPS_BUILD=ON \
-  --cmake_generator Ninja \
-  --parallel "$NUMBER_OF_PROCESSORS" \
-  --skip_tests \
-  --build
+  --skip_tests
 
 WHEEL=$(ls build/Release/dist/*.whl)
 cp "$WHEEL" "$OUT_DIR/"

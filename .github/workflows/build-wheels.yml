@@ -112,7 +112,7 @@ jobs:
       - name: Install build tools
         shell: bash
         run: |
-          pip install wheel numpy "onnx>=1.17" "setuptools==79.0.1"
+          pip install wheel numpy "onnx>=1.17" "setuptools==79.0.1" flatbuffers protobuf
       - name: Build reduced-ops onnxruntime-directml wheel
         shell: bash
         timeout-minutes: 270
