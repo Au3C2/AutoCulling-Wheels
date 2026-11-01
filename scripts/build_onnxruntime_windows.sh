@@ -31,20 +31,56 @@ cmake --version | head -1
 python --version
 
 echo "=== 1. Cloning onnxruntime ${ORT_VER} ==="
-git clone --depth 1 --branch "${ORT_VER}" https://github.com/microsoft/onnxruntime.git ort
+# The big clone occasionally dies mid-transfer on flaky links; retry.
+for attempt in 1 2 3; do
+  if git clone --depth 1 --branch "${ORT_VER}" https://github.com/microsoft/onnxruntime.git ort; then
+    break
+  fi
+  if [ "$attempt" = "3" ]; then
+    echo "clone failed after 3 attempts" >&2
+    exit 1
+  fi
+  rm -rf ort
+  echo "clone attempt ${attempt} failed; retrying in 15s..."
+  sleep 15
+done
 cd ort
 
-echo "=== 2. Generating wheel ==="
+echo "=== 2. Build wheel (documented 3-step reduced-ops flow) ==="
 cp "$HERE/onnxruntime_windows_reduced_ops.config" reduced_ops.config
+
+# Step A: configure. REDUCED_OPS_BUILD is passed as an explicit cmake define
+# instead of --include_ops_by_config: build.py's update phase imports
+# reduce_op_kernels in-process, and its `from util import parse_config`
+# resolves against a stale sys.modules['util'] on some environments
+# (ImportError on the GitHub runner; worked locally). The standalone
+# reduce step below replaces that fragile in-process call.
 python tools/ci_build/build.py \
   --config Release \
   --build_dir build \
   --build_wheel \
   --use_dml \
-  --include_ops_by_config reduced_ops.config \
+  --cmake_extra_defines onnxruntime_REDUCED_OPS_BUILD=ON \
+  --cmake_generator Ninja \
   --parallel "$NUMBER_OF_PROCESSORS" \
   --skip_tests \
-  --update --build
+  --update
+
+# Step B: prune the kernel registrations (standalone, fresh interpreter).
+python tools/ci_build/reduce_op_kernels.py reduced_ops.config --cmake_build_dir build/Release
+
+# Step C: compile. REDUCED_OPS_BUILD is already configured; update=False
+# keeps build.py from re-importing reduce_op_kernels in-process.
+python tools/ci_build/build.py \
+  --config Release \
+  --build_dir build \
+  --build_wheel \
+  --use_dml \
+  --cmake_extra_defines onnxruntime_REDUCED_OPS_BUILD=ON \
+  --cmake_generator Ninja \
+  --parallel "$NUMBER_OF_PROCESSORS" \
+  --skip_tests \
+  --build
 
 WHEEL=$(ls build/Release/dist/*.whl)
 cp "$WHEEL" "$OUT_DIR/"
