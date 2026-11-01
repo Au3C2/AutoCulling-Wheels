@@ -47,41 +47,41 @@ done
 cd ort
 
 # MSVC 18 deprecates the non-string [[gsl::suppress(x)]] form (C4875,
-# escalated to an error by /WX). Two fixes are applied to the freshly
-# cloned ORT tree, both of which must land BEFORE configure:
-#   1. rewrite ORT's own gsl patch (cmake/patches/gsl/1064.patch) so the
-#      macro it installs uses the string-literal [[gsl::suppress("x")]]
-#      form - the officially recommended migration, semantically identical;
-#   2. hook that patch into the NON-CUDA gsl FetchContent branch: the
-#      onnxruntime_USE_CUDA if/else declares GSL twice and only the CUDA
-#      branch carries a PATCH_COMMAND, so the DirectML build otherwise
-#      compiles the upstream non-string macro.
+# escalated to an error by /WX). Both fixes must land BEFORE configure:
+#   - the non-CUDA gsl FetchContent branch carries no PATCH_COMMAND, so the
+#     DirectML build compiles the upstream macro;
+#   - the upstream gsl zip has CRLF line endings, which defeats
+#     `patch --binary` ("Hunk FAILED: different line endings") even with
+#     --ignore-whitespace.
+# Both branches therefore get a byte-level PATCH_COMMAND (scripts/patch_gsl_
+# macro.py rewrites the macro in-place inside the downloaded gsl tree; the
+# macro definition lines contain no line terminators, so CRLF is irrelevant).
 python - <<'PYEOF'
 from pathlib import Path
 
-p = Path('cmake/patches/gsl/1064.patch')
-t = p.read_text()
-old = '#define GSL_SUPPRESS(x) [[gsl::suppress(x)]]'
-new = '#define GSL_SUPPRESS(x) [[gsl::suppress("x")]]'
-count = t.count(old)
-assert count == 2, 'expected 2 occurrences, found %d' % count
-p.write_text(t.replace(old, new))
-
 d = Path('cmake/external/onnxruntime_external_deps.cmake')
-dt = d.read_text()
+t = d.read_text()
+
+cmd = "${Python_EXECUTABLE} $ENV{GITHUB_WORKSPACE}/scripts/patch_gsl_macro.py"
+old_cuda = "PATCH_COMMAND ${Patch_EXECUTABLE} --binary --ignore-whitespace -p1 < ${PROJECT_SOURCE_DIR}/patches/gsl/1064.patch"
+assert t.count(old_cuda) == 1, 'CUDA gsl PATCH_COMMAND not found'
+t = t.replace(old_cuda, "PATCH_COMMAND " + cmd, 1)
+
 anchor = """    URL_HASH SHA1=${DEP_SHA1_microsoft_gsl}
     EXCLUDE_FROM_ALL
     FIND_PACKAGE_ARGS 4.0 NAMES Microsoft.GSL
   )"""
 patched = """    URL_HASH SHA1=${DEP_SHA1_microsoft_gsl}
-    PATCH_COMMAND ${Patch_EXECUTABLE} --binary --ignore-whitespace -p1 < ${PROJECT_SOURCE_DIR}/patches/gsl/1064.patch
+    PATCH_COMMAND """ + cmd + """
     EXCLUDE_FROM_ALL
     FIND_PACKAGE_ARGS 4.0 NAMES Microsoft.GSL
   )"""
-n = dt.count(anchor)
+n = t.count(anchor)
 assert n == 1, 'expected exactly 1 unpatched gsl declare, found %d' % n
-d.write_text(dt.replace(anchor, patched, 1))
-print('gsl macro string-literal + PATCH_COMMAND hooked into non-CUDA branch')
+t = t.replace(anchor, patched, 1)
+
+d.write_text(t)
+print('gsl PATCH_COMMAND switched to byte-level rewriter on both branches')
 PYEOF
 
 echo "=== 2. Build wheel (single-step reduced-ops flow, same as macOS) ==="
