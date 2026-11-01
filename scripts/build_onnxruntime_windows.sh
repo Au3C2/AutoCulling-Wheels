@@ -46,6 +46,25 @@ for attempt in 1 2 3; do
 done
 cd ort
 
+# MSVC 18 deprecates the non-string [[gsl::suppress(x)]] form (C4875,
+# escalated to an error by /WX). Rewrite ORT's own gsl patch so the macro it
+# installs uses the string-literal form [[gsl::suppress("x")]] - the
+# officially recommended migration, semantically identical. Patching the
+# patch file is the only hook that runs before FetchContent applies it
+# during configure.
+python - <<'PYEOF'
+from pathlib import Path
+
+p = Path('cmake/patches/gsl/1064.patch')
+t = p.read_text()
+old = '#define GSL_SUPPRESS(x) [[gsl::suppress(x)]]'
+new = '#define GSL_SUPPRESS(x) [[gsl::suppress("x")]]'
+count = t.count(old)
+assert count == 2, 'expected 2 occurrences, found %d' % count
+p.write_text(t.replace(old, new))
+print('gsl patch rewritten (2 macro definitions now string-literal)')
+PYEOF
+
 echo "=== 2. Build wheel (single-step reduced-ops flow, same as macOS) ==="
 # The earlier 3-step variant (configure with REDUCED_OPS_BUILD=ON, then a
 # standalone reduce_op_kernels pass, then build) cannot work: the reduced
@@ -65,7 +84,6 @@ python tools/ci_build/build.py \
   --disable_ml_ops \
   --include_ops_by_config "$HERE/onnxruntime_windows_reduced_ops.config" \
   --cmake_extra_defines CMAKE_POLICY_VERSION_MINIMUM=3.5 \
-  --cmake_extra_defines "CMAKE_CXX_FLAGS=/wd4875" \
   --cmake_generator Ninja \
   --parallel "$NUMBER_OF_PROCESSORS" \
   --skip_tests
