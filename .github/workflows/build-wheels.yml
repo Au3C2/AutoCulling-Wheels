@@ -13,7 +13,9 @@ on:
 
 jobs:
   build-macos:
-    runs-on: macos-14
+    # macos-14 images were retired 2026-11-02 (runner-images#13518 brownout);
+    # macos-15 is the arm64 successor.
+    runs-on: macos-15
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
