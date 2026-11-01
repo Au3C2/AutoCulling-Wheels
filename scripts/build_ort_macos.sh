@@ -22,10 +22,12 @@ OUT_DIR="${1:-dist}"
 mkdir -p "${OUT_DIR}"
 ABS_OUT_DIR="$(cd "${OUT_DIR}" && pwd)"
 
-# Pin the deployment target and single-arch slice so the produced wheel tag
-# stays macosx_11_0_arm64 (macos-15 runners default to 15.0/universal2 tags,
-# which breaks the direct-URL references in the AutoCulling repo).
-export MACOSX_DEPLOYMENT_TARGET=11.0
+# Pin the deployment target to 12.0 — the official onnxruntime 1.23.2 macOS
+# wheel baseline (CoreML provider needs the MLMultiArray Float16 APIs from
+# macOS 12). The unguarded-availability warning for the macOS 13 compute-unit
+# enum is downgraded from -Werror (the official build does the same); the
+# runtime code paths behind it are guarded by CoreML EP capability checks.
+export MACOSX_DEPLOYMENT_TARGET=12.0
 export CMAKE_OSX_ARCHITECTURES=arm64
 
 WORKDIR="${TMPDIR:-/tmp}/build_ort_macos"
@@ -54,6 +56,8 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
   --cmake_path="$(command -v cmake)" \
   --ctest_path="$(command -v ctest)" \
   --cmake_extra_defines="CMAKE_POLICY_VERSION_MINIMUM=3.5" \
+  --cmake_extra_defines="CMAKE_OBJCXX_FLAGS=-Wno-error=unguarded-availability-new" \
+  --cmake_extra_defines="CMAKE_OBJC_FLAGS=-Wno-error=unguarded-availability-new" \
   --cmake_extra_defines="onnxruntime_BUILD_UNIT_TESTS=OFF" \
   --cmake_generator="Unix Makefiles"
 
