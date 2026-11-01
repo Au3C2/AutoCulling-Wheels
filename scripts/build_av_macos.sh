@@ -5,6 +5,7 @@ FFMPEG_TAG="n8.0.3"
 PYAV_VER="17.1.0"
 OUT_DIR="${1:-dist}"
 mkdir -p "${OUT_DIR}"
+ABS_OUT_DIR="$(cd "${OUT_DIR}" && pwd)"
 
 WORKDIR="${TMPDIR:-/tmp}/build_av_macos"
 rm -rf "${WORKDIR}"
@@ -66,5 +67,5 @@ if 'seek_func: seek_func_t = pyio_seek' in text:
 python3 setup.py bdist_wheel --ffmpeg-dir="${WORKDIR}/ffmpeg_install"
 
 echo "=== 3. Delocating PyAV wheel ==="
-delocate-wheel -v -w "${OLDPWD}/${OUT_DIR}" dist/*.whl
+delocate-wheel -v -w "${ABS_OUT_DIR}" dist/*.whl
 echo "SUCCESS: Standalone PyAV wheel built at ${OUT_DIR}"

@@ -22,6 +22,12 @@ OUT_DIR="${1:-dist}"
 mkdir -p "${OUT_DIR}"
 ABS_OUT_DIR="$(cd "${OUT_DIR}" && pwd)"
 
+# Pin the deployment target and single-arch slice so the produced wheel tag
+# stays macosx_11_0_arm64 (macos-15 runners default to 15.0/universal2 tags,
+# which breaks the direct-URL references in the AutoCulling repo).
+export MACOSX_DEPLOYMENT_TARGET=11.0
+export CMAKE_OSX_ARCHITECTURES=arm64
+
 WORKDIR="${TMPDIR:-/tmp}/build_ort_macos"
 rm -rf "${WORKDIR}"
 mkdir -p "${WORKDIR}"
