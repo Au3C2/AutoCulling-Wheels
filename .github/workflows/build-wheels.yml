@@ -54,11 +54,24 @@ jobs:
         run: |
           chmod +x scripts/build_opencv_windows.sh
           ./scripts/build_opencv_windows.sh dist
+      - name: Setup MSYS2 (mingw64 toolchain for the PyAV build)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          release: false
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-make mingw-w64-x86_64-nasm make diffutils
+        # The pyav wheel must be built with the MinGW toolchain (see
+        # build_av_windows.sh header): the MSVC-built ffmpeg crashed in HEVC
+        # decode. The extension itself is still compiled with the Windows
+        # CPython (setup-python) using distutils' mingw32 compiler.
       - name: Build minimal PyAV wheel
-        shell: bash
+        shell: msys2 {0}
         run: |
-          chmod +x scripts/build_av_windows.sh
-          ./scripts/build_av_windows.sh dist
+          export MINGW_BIN="$(cygpath -u /mingw64/bin)"
+          export PATH="/mingw64/bin:$PATH"
+          OUT_ABS=$(cygpath -m "$(cygpath -u "$GITHUB_WORKSPACE")/dist")
+          bash scripts/build_av_windows.sh "$OUT_ABS"
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-windows

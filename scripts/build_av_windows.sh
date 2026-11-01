@@ -1,91 +1,55 @@
 #!/usr/bin/env bash
-# build_av_windows.sh — Build the minimal PyAV wheel on Windows (MSVC).
+# build_av_windows.sh — Build the minimal PyAV wheel on Windows (MinGW via MSYS2).
 #
-# Mirrors build_av_macos.sh: minimal FFmpeg n8.0.3 (mov demuxer + hevc/mjpeg
-# decode + swscale/swresample/avdevice only) then PyAV 17.1.0 against it,
-# with the ffmpeg DLLs bundled into the av/ package. On GitHub runners the
-# ffmpeg build uses the MSVC toolchain (msvc-dev-cmd), matching the official
-# PyAV Windows wheel build environment.
+# Minimal FFmpeg n8.0.3 (mov demuxer + hevc/mjpeg decode + swscale/swresample/
+# avdevice only) with plain gcc, then PyAV 17.1.0 compiled against it with the
+# same MinGW toolchain (distutils mingw32 compiler), ffmpeg DLLs bundled into
+# av/. This mirrors the locally validated recipe bit for bit (the MSVC
+# toolchain variant crashes in HEVC decode: cl 19.5x-built ffmpeg reserves a
+# 1 MB stack and miscompiles at av.open, while the MinGW build decodes
+# bit-identically to the official PyAV wheel).
 #
-# Locally validated 2026-10-31 (MinGW build, same sources/config): primary
-# HEIF stream decode bit-identical to the official wheel; all 53 engine
-# gates green.
+# Run under the MSYS2 mingw64 shell provided by the workflow (setup-msys2);
+# PATH must contain: mingw64/bin (gcc/make/nasm), the Windows venv Scripts
+# (python), and $OUT_DIR must be absolute.
 #
-# Usage: build_av_windows.sh [out_dir]
+# Usage: build_av_windows.sh [abs_out_dir]
 set -euo pipefail
 
 FFMPEG_TAG="n8.0.3"
 PYAV_VER="17.1.0"
-OUT_DIR="${1:-dist}"
+OUT_DIR="${1:?usage: build_av_windows.sh <abs_out_dir>}"
 WORKDIR="${TEMP:-/tmp}/build_av_windows"
-mkdir -p "$OUT_DIR"
-# Absolutize before any cd: the build runs in a temp WORKDIR.
-OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 rm -rf "$WORKDIR"
 mkdir -p "$WORKDIR"
 cd "$WORKDIR"
+
+echo "=== toolchain ==="
+gcc --version | head -1
+nasm -v
+python --version
 
 echo "=== 1. Cloning FFmpeg ${FFMPEG_TAG} ==="
 git clone --depth 1 --branch "${FFMPEG_TAG}" https://github.com/FFmpeg/FFmpeg.git ffmpeg
 cd ffmpeg
 
-echo "=== 2. Configuring + building minimal FFmpeg (MSVC) ==="
-# ffmpeg's MSVC dependency generation parses /showIncludes output with an awk
-# script that Git-Bash's awk cannot parse. The runner's preinstalled MSYS2 awk
-# can — copy it (with its runtime) into an isolated dir so we don't shadow
-# MSVC's link.exe with msys2's /usr/bin/link.
-mkdir -p "$WORKDIR/tools"
-cp /c/msys64/usr/bin/awk.exe "$WORKDIR/tools/" 2>/dev/null || true
-cp /c/msys64/usr/bin/msys-2.0.dll "$WORKDIR/tools/" 2>/dev/null || true
-export PATH="$WORKDIR/tools:$PATH"
-awk --version 2>/dev/null | head -1
+echo "=== 2. Configuring + building minimal FFmpeg (MinGW gcc) ==="
 ./configure \
-  --toolchain=msvc \
   --prefix="${WORKDIR}/ffmpeg_install" \
+  --enable-shared --disable-static --disable-programs --disable-doc \
+  --disable-network --disable-autodetect \
+  --disable-zlib --disable-bzlib --disable-lzma --disable-iconv \
   --disable-everything \
-  --disable-programs \
-  --disable-doc \
-  --disable-network \
-  --disable-autodetect \
-  --enable-shared \
-  --enable-protocol=file \
-  --enable-demuxer=mov,hevc,mjpeg,image2 \
-  --enable-decoder=hevc,mjpeg,h264 \
-  --enable-parser=hevc,mjpeg,h264 \
-  --enable-swscale \
-  --enable-swresample \
-  --enable-avcodec \
-  --enable-avformat \
-  --enable-avutil \
-  --enable-avfilter \
-  --enable-avdevice \
-  --extra-cflags="/O2"
+  --enable-demuxer=mov \
+  --enable-decoder=hevc,mjpeg \
+  --enable-parser=hevc,mjpeg \
+  --enable-protocol=file,pipe \
+  --extra-ldflags="-Wl,--stack,8388608" \
+  > configure.log 2>&1
+tail -5 configure.log
 
-# The /showIncludes awk regex stored in ffbuild/config.mak loses backslashes
-# through the make->shell->awk chain at runtime. Replace the regex with a
-# backslash-free program: the backslash char is built at awk runtime via
-# sprintf("%c%c", 92, 92), so no escaping layer can damage it.
-python - <<'PY'
-import glob
-bs = chr(92)
-stored = 'gsub(/' + bs + bs + '/, "/");'
-replacement = 'BS=sprintf("%c%c", 92, 92); gsub(BS, "/");'
-for p in glob.glob('ffbuild/config.mak') + glob.glob('ffbuild/common.mak'):
-    s = open(p, encoding='utf-8', newline='').read()
-    if stored in s:
-        open(p, 'w', encoding='utf-8', newline='').write(s.replace(stored, replacement))
-        print('patched: backslash-free awk DEP program written to', p)
-    else:
-        print('no stored gsub form in', p)
-PY
-
-make -j"$(nproc)" install
-
-# MSVC builds leave the .lib import libraries in the build tree (the install
-# rule ships only headers/pc/dlls); PyAV links against them, so collect them
-# into the install lib/ dir.
-find "$WORKDIR/ffmpeg" -maxdepth 2 -name "*.lib" -exec cp {} "$WORKDIR/ffmpeg_install/lib/" \;
-ls "$WORKDIR/ffmpeg_install/lib/" | grep -c "\.lib" || true
+make -j"$(nproc)" install > make.log 2>&1
+tail -2 make.log
 cd "$WORKDIR"
 
 echo "=== 3. Building PyAV ${PYAV_VER} against minimal FFmpeg ==="
@@ -107,11 +71,29 @@ if 'seek_func: seek_func_t = pyio_seek' in text:
     open(p, 'w').write(text.replace('seek_func: seek_func_t = pyio_seek', 'seek_func = pyio_seek', 1))
 "
 
-python setup.py bdist_wheel --ffmpeg-dir="${WORKDIR}/ffmpeg_install"
+# MinGW toolchain for the extension (locally validated configuration):
+# distutils mingw32 compiler + MS_WIN64 (pyconfig.h only defines it under
+# _MSC_VER) + fully static MinGW runtime so the pyd has no libgcc/libstdc++/
+# libwinpthread imports, + gcc-14-compatible pointer-warning downgrade.
+printf '[build_ext]\ncompiler=mingw32\ndefine=MS_WIN64\n' > setup.cfg
+python -c "
+p = 'setup.py'
+s = open(p).read()
+old = '''extra_compile_args = []
+if platform.system() != \"Windows\":
+    extra_compile_args.append(\"-Wno-error=incompatible-pointer-types\")'''
+new = '''extra_compile_args = [\"-Wno-error=incompatible-pointer-types\"]
+extra_link_args = [\"-static\", \"-static-libgcc\", \"-static-libstdc++\"]'''
+assert old in s, 'setup.py pattern not found'
+open(p, 'w', newline=chr(10)).write(s.replace(old, new))
+print('patched setup.py for mingw')
+"
+
+python setup.py --ffmpeg-dir="${WORKDIR}/ffmpeg_install" bdist_wheel
 
 echo "=== 4. Bundling ffmpeg DLLs into the av/ package ==="
-python - <<'PYEOF'
-import base64, hashlib, os, shutil, zipfile
+python - <<'PY'
+import base64, glob, hashlib, os, shutil, zipfile
 
 whl = [f for f in os.listdir('dist') if f.endswith('.whl')][0]
 prefix = os.path.join('..', 'ffmpeg_install', 'bin')
@@ -120,11 +102,14 @@ shutil.rmtree(work, ignore_errors=True)
 with zipfile.ZipFile(os.path.join('dist', whl)) as z:
     z.extractall(work)
 
-import glob
 dlls = sorted(glob.glob(os.path.join(prefix, '*.dll')))
 assert dlls, 'no ffmpeg DLLs found in ' + prefix
+mingw = os.environ.get('MINGW_BIN', '')
+pthread = os.path.join(mingw, 'libwinpthread-1.dll') if mingw else None
 for src in dlls:
     shutil.copy2(src, os.path.join(work, 'av', os.path.basename(src)))
+if pthread and os.path.exists(pthread):
+    shutil.copy2(pthread, os.path.join(work, 'av', 'libwinpthread-1.dll'))
 
 rec_path = os.path.join(work, 'av-17.1.0.dist-info', 'RECORD')
 lines = [l for l in open(rec_path, encoding='utf-8').read().splitlines() if l.strip()]
@@ -137,6 +122,11 @@ for src in dlls:
     data = open(os.path.join(work, 'av', name), 'rb').read()
     h = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b'=').decode()
     lines.append('av/%s,sha256=%s,%d' % (name, h, len(data)))
+pthread_rel = 'av/libwinpthread-1.dll'
+if pthread and os.path.exists(pthread) and pthread_rel not in seen:
+    data = open(os.path.join(work, 'av', 'libwinpthread-1.dll'), 'rb').read()
+    h = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b'=').decode()
+    lines.append('av/libwinpthread-1.dll,sha256=%s,%d' % (h, len(data)))
 open(rec_path, 'w', encoding='utf-8', newline='\n').write('\n'.join(lines) + '\n')
 
 out = os.path.join('dist', whl)
@@ -148,7 +138,7 @@ with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as z:
             z.write(full, rel)
 shutil.rmtree(work)
 print('bundled wheel: %.2f MB' % (os.path.getsize(out) / 1048576))
-PYEOF
+PY
 
 cp dist/*.whl "$OUT_DIR/"
 echo "SUCCESS: minimal PyAV wheel built at $OUT_DIR"
