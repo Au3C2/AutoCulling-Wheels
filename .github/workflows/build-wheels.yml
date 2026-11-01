@@ -60,6 +60,7 @@ jobs:
           msystem: MINGW64
           update: false
           release: false
+          path-type: inherit
           install: mingw-w64-x86_64-gcc mingw-w64-x86_64-make mingw-w64-x86_64-nasm make diffutils
         # The pyav wheel must be built with the MinGW toolchain (see
         # build_av_windows.sh header): the MSVC-built ffmpeg crashed in HEVC
