@@ -19,8 +19,8 @@ set -euo pipefail
 ORT_VER="1.23.2"
 OPS_CONFIG="$(cd "$(dirname "$0")" && pwd)/onnxruntime_required_ops.config"
 OUT_DIR="${1:-dist}"
-ABS_OUT_DIR="$(cd "$(dirname "$0")" && pwd)/${OUT_DIR}"
-mkdir -p "${ABS_OUT_DIR}"
+mkdir -p "${OUT_DIR}"
+ABS_OUT_DIR="$(cd "${OUT_DIR}" && pwd)"
 
 WORKDIR="${TMPDIR:-/tmp}/build_ort_macos"
 rm -rf "${WORKDIR}"

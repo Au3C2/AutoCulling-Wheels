@@ -66,5 +66,5 @@ if 'seek_func: seek_func_t = pyio_seek' in text:
 python3 setup.py bdist_wheel --ffmpeg-dir="${WORKDIR}/ffmpeg_install"
 
 echo "=== 3. Delocating PyAV wheel ==="
-delocate-wheel -v -w "${OUT_DIR}" dist/*.whl
+delocate-wheel -v -w "${OLDPWD}/${OUT_DIR}" dist/*.whl
 echo "SUCCESS: Standalone PyAV wheel built at ${OUT_DIR}"
