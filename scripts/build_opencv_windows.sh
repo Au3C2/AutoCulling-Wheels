@@ -83,7 +83,7 @@ meta = os.path.join(new_di, 'METADATA')
 raw = open(meta, 'rb').read()
 print('METADATA head repr:', repr(raw[:120]))
 import re
-raw2, nsub = re.subn(rb'^Name: opencv-python\r?$', b'Name: opencv-python-custom', raw,
+raw2, nsub = re.subn(rb'^Name: opencv[_-]python\r?$', b'Name: opencv-python-custom', raw,
                      count=1, flags=re.M)
 assert nsub == 1, 'METADATA Name rename failed (see head repr above)'
 open(meta, 'wb').write(raw2)
