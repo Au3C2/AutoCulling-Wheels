@@ -80,15 +80,14 @@ new_di = os.path.join(work, 'opencv_python_custom-5.0.0.93.dist-info')
 if os.path.isdir(old_di) and not os.path.isdir(new_di):
     os.rename(old_di, new_di)
 meta = os.path.join(new_di, 'METADATA')
-s = open(meta, encoding='utf-8', newline='').read()
-# Match the Name field regardless of CRLF vs LF line endings.
-for old_name in ('Name: opencv-python\r\n', 'Name: opencv-python\n'):
-    if old_name in s:
-        s = s.replace(old_name, 'Name: opencv-python-custom' + old_name[-2:], 1)
-        break
-assert 'Name: opencv-python-custom' in s, 'METADATA rename failed'
-open(meta, 'w', encoding='utf-8', newline='').write(s)
-print('METADATA Name ->', [l for l in s.splitlines() if l.startswith('Name:')][0])
+raw = open(meta, 'rb').read()
+print('METADATA head repr:', repr(raw[:120]))
+import re
+raw2, nsub = re.subn(rb'^Name: opencv-python\r?$', b'Name: opencv-python-custom', raw,
+                     count=1, flags=re.M)
+assert nsub == 1, 'METADATA Name rename failed (see head repr above)'
+open(meta, 'wb').write(raw2)
+print('METADATA Name -> opencv-python-custom')
 
 record = os.path.join(new_di, 'RECORD')
 lines = [l.replace('opencv_python-5.0.0.93.dist-info', 'opencv_python_custom-5.0.0.93.dist-info')
