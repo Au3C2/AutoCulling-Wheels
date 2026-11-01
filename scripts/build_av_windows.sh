@@ -61,22 +61,26 @@ awk --version 2>/dev/null | head -1
   --enable-avdevice \
   --extra-cflags="/O2"
 
-# Running configure under Git Bash eats one level of backslash escaping via
-# the eval that writes CCDEP into ffbuild/config.mak, leaving an invalid awk
-# regex (gsub(/\/, "/")) that breaks every MSVC .dep rule. Repair the escaping
-# before make (python + chr() to avoid shell mangling here too).
+# Running configure under Git Bash mangles the /showIncludes awk regex
+# (gsub(/\\/, "/")) that reaches ffbuild/config.mak through an eval — the
+# exact number of surviving backslashes varies, so normalize ANY variant to
+# exactly two and dump the line for debugging.
 python - <<'PY'
-import glob
+import glob, re
 bs = chr(92)
-broken = 'gsub(/' + bs + '/, "/")'
+pat = re.compile('gsub\\(/' + bs + '*/, "/"\\)')
 fixed = 'gsub(/' + bs + bs + '/, "/")'
 for p in glob.glob('ffbuild/config.mak') + glob.glob('ffbuild/common.mak'):
     s = open(p, encoding='utf-8', newline='').read()
-    if broken in s:
-        open(p, 'w', encoding='utf-8', newline='').write(s.replace(broken, fixed))
-        print('patched: repaired mangled awk regex in', p)
-    else:
-        print('no mangled gsub in', p)
+    found = pat.findall(s)
+    if found:
+        for f in found:
+            s = s.replace(f, fixed)
+        open(p, 'w', encoding='utf-8', newline='').write(s)
+    print(p, '-> gsub variants found:', [len(f) for f in found])
+    for line in s.splitlines():
+        if 'including' in line:
+            print('DEP line:', line[:240])
 PY
 
 make -j"$(nproc)" install
