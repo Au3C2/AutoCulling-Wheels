@@ -21,6 +21,7 @@ set -euo pipefail
 ORT_VER="v1.23.0"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT_DIR="${1:?usage: build_onnxruntime_windows.sh <abs_out_dir>}"
+mkdir -p "$OUT_DIR"
 WORKDIR="${TEMP:-/tmp}/build_ort_windows"
 rm -rf "$WORKDIR"
 mkdir -p "$WORKDIR"
@@ -117,5 +118,6 @@ python tools/ci_build/build.py \
   --skip_tests
 
 WHEEL=$(ls build/Release/dist/*.whl)
+mkdir -p "$OUT_DIR"
 cp "$WHEEL" "$OUT_DIR/"
 echo "SUCCESS: onnxruntime wheel built at $OUT_DIR ($(basename "$WHEEL"))"

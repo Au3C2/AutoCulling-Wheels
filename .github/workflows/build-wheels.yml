@@ -125,10 +125,14 @@ jobs:
         run: |
           chmod +x scripts/build_onnxruntime_windows.sh
           ./scripts/build_onnxruntime_windows.sh "$(cygpath -m "$GITHUB_WORKSPACE/dist")"
+      - name: Generate sha256 checksums
+        shell: bash
+        run: |
+          cd dist && sha256sum *.whl > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-windows-ort
-          path: dist/*.whl
+          path: dist/*
 
   release:
     needs: [build-macos, build-windows, build-windows-ort]
