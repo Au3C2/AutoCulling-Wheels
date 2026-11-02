@@ -62,7 +62,15 @@ from pathlib import Path
 d = Path('cmake/external/onnxruntime_external_deps.cmake')
 t = d.read_text()
 
-cmd = "${Python_EXECUTABLE} $ENV{GITHUB_WORKSPACE}/scripts/patch_gsl_macro.py"
+# All paths in PATCH_COMMAND must be forward-slash absolute literals with NO
+# cmake variable expansion: the command is written verbatim into the
+# FetchContent sub-build CMakeLists, where backslash escapes from expanded
+# values (${Python_EXECUTABLE} -> C:\hostedtoolcache\..., $ENV{...} ->
+# D:\a\...) fail to parse ("Invalid character escape"). 'python' resolves
+# through the job PATH at patch-execution time.
+import os
+ws = os.environ['GITHUB_WORKSPACE'].replace('\\', '/')
+cmd = 'python ' + ws + '/scripts/patch_gsl_macro.py'
 old_cuda = "PATCH_COMMAND ${Patch_EXECUTABLE} --binary --ignore-whitespace -p1 < ${PROJECT_SOURCE_DIR}/patches/gsl/1064.patch"
 assert t.count(old_cuda) == 1, 'CUDA gsl PATCH_COMMAND not found'
 t = t.replace(old_cuda, "PATCH_COMMAND " + cmd, 1)
