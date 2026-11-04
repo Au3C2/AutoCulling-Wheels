@@ -6,9 +6,9 @@
 # yolov8n) use only 29 standard ops + the com.microsoft fused kernels that
 # appear after ORT's graph transformers run (QuickGelu, DmlFusedConv). This
 # script builds ORT v1.23.0 with the committed reduced-ops config
-# (onnxruntime_windows_reduced_ops.config, generated from the OPTIMIZED graphs
-# — regenerating it from the raw ONNX models misses the fused kernels and
-# breaks inference) and produces a wheel whose capi is 46 MB vs 64 MB, with
+# (onnxruntime_windows_reduced_ops.config, combining raw ONNX model ops for
+# CPUExecutionProvider deterministic baseline and DirectML fused kernels
+# QuickGelu, DmlFusedConv for GPU inference) and produces a wheel whose capi is 46 MB vs 64 MB, with
 # outputs verified bit-identical to the official wheel and throughput at
 # parity (interleaved A/B, 2026-11-01).
 #
